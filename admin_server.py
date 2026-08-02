@@ -1,6 +1,6 @@
 import os
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import firebase_admin
 from firebase_admin import credentials, auth, firestore
@@ -18,7 +18,11 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-app = Flask(__name__)
+app = Flask(
+    __name__,
+    static_folder=".",
+    static_url_path=""
+)
 CORS(app)
 
 
@@ -173,15 +177,23 @@ def update_current_admin():
 
 @app.route("/")
 def home():
-    return "Liver Admin Server is Running!"
-    
+    return send_from_directory(".", "index.html")
+
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({
         "success": True,
         "message": "Admin server is running",
     })
+    
+@app.route("/css/<path:filename>")
+def css(filename):
+    return send_from_directory("css", filename)
 
+
+@app.route("/js/<path:filename>")
+def js(filename):
+    return send_from_directory("js", filename)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "5501"))
