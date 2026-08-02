@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>肝臟健康系統｜管理員</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="loginView" class="center-card">
+    <h1>管理員登入</h1>
+    <p class="muted">僅限已登記的管理員帳號</p>
+    <form id="loginForm">
+      <label>Email</label>
+      <input id="loginEmail" type="email" required>
+      <label>密碼</label>
+      <input id="loginPassword" type="password" required>
+      <button type="submit">登入</button>
+      <p id="loginMessage" class="message"></p>
+    </form>
+  </div>
+
+  <div id="appView" class="app hidden">
+    <aside>
+      <div class="brand">肝臟健康管理</div>
+      <button class="nav active" data-page="dashboard">首頁</button>
+      <button class="nav" data-page="doctors">醫師管理</button>
+      <button class="nav" data-page="patients">病患管理</button>
+      <button class="nav" data-page="bindings">綁定管理</button>
+      <button class="nav" data-page="admins">管理員管理</button>
+      <button id="logoutBtn" class="logout">登出</button>
+    </aside>
+
+    <main>
+      <header>
+        <h2 id="pageTitle">首頁</h2>
+        <span id="currentAdmin"></span>
+      </header>
+
+      <section id="dashboard" class="page">
+        <div class="stats">
+          <div class="stat"><b id="doctorCount">0</b><span>醫師</span></div>
+          <div class="stat"><b id="pendingCount">0</b><span>待審核醫師</span></div>
+          <div class="stat"><b id="patientCount">0</b><span>病患</span></div>
+          <div class="stat"><b id="bindingCount">0</b><span>綁定</span></div>
+        </div>
+      </section>
+
+      <section id="doctors" class="page hidden">
+        <div class="toolbar">
+          <input id="doctorSearch" placeholder="搜尋姓名或 Email">
+          <button id="reloadDoctors">重新整理</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>姓名</th><th>Email</th><th>狀態</th><th>操作</th></tr></thead>
+            <tbody id="doctorTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="patients" class="page hidden">
+        <div class="toolbar">
+          <input id="patientSearch" placeholder="搜尋姓名或 Email">
+          <button id="reloadPatients">重新整理</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>姓名</th><th>Email</th><th>疾病類型</th><th>下次回診</th></tr></thead>
+            <tbody id="patientTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="bindings" class="page hidden">
+        <div class="panel">
+          <h3>新增綁定</h3>
+          <select id="bindingDoctor"><option value="">選擇醫師</option></select>
+          <select id="bindingPatient"><option value="">選擇病患</option></select>
+          <button id="addBindingBtn">新增綁定</button>
+          <p id="bindingMessage" class="message"></p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>醫師</th><th>病患</th><th>狀態</th><th>操作</th></tr></thead>
+            <tbody id="bindingTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="admins" class="page hidden">
+        <div class="panel">
+  <h3>編輯目前帳戶</h3>
+
+  <p class="muted">
+    可以修改目前登入帳戶的 Email；新密碼留空代表不修改密碼。
+  </p>
+
+  <input
+    id="currentAdminEmail"
+    type="email"
+    placeholder="目前帳戶 Email"
+  ><div class="admin-action-tabs">
+
+    <button
+        id="showEditAdminBtn"
+        class="admin-tab-button">
+        編輯目前帳戶
+    </button>
+
+    <button
+        id="showAddAdminBtn"
+        class="admin-tab-button">
+        新增管理員
+    </button>
+
+</div>
+
+
+<div
+    id="editCurrentAdminPanel"
+    class="panel hidden">
+
+    <h3>編輯目前帳戶</h3>
+
+    <p class="muted">
+        可以修改目前登入帳戶的 Email；新密碼留空代表不修改密碼。
+    </p>
+
+    <input
+        id="currentAdminEmail"
+        type="email"
+        placeholder="目前帳戶 Email">
+
+    <input
+        id="currentAdminPassword"
+        type="password"
+        placeholder="新密碼（不修改可留空）">
+
+    <input
+        id="currentAdminPasswordConfirm"
+        type="password"
+        placeholder="再次輸入新密碼">
+
+    <button id="updateCurrentAdminBtn">
+        儲存帳戶修改
+    </button>
+
+    <p id="currentAdminMessage" class="message"></p>
+
+</div>
+
+
+<div
+    id="addAdminPanel"
+    class="panel hidden">
+
+    <h3>新增管理員</h3>
+
+    <p class="muted">
+        建立新的管理員帳號
+    </p>
+
+    <input
+        id="adminEmail"
+        type="email"
+        placeholder="Email">
+
+    <input
+        id="adminPassword"
+        type="password"
+        placeholder="密碼（至少6碼）">
+
+    <input
+        id="adminName"
+        placeholder="姓名">
+
+    <button id="addAdminBtn">
+        新增管理員
+    </button>
+
+    <p id="adminMessage" class="message"></p>
+
+</div>
+
+
+<div class="table-wrap">
+
+    <table>
+
+        <thead>
+            <tr>
+                <th>姓名</th>
+                <th>Email</th>
+                <th>UID</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+
+        <tbody id="adminTable"></tbody>
+
+    </table>
+
+</div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
