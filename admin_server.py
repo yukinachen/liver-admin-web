@@ -7,8 +7,14 @@ from firebase_admin import credentials, auth, firestore
 
 
 # 初始化 Firebase Admin
-cred = credentials.Certificate("serviceAccountKey.json")
-firebase_admin.initialize_app(cred)
+credential_path = os.environ.get(
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "serviceAccountKey.json",
+)
+
+if not firebase_admin._apps:
+    cred = credentials.Certificate(credential_path)
+    firebase_admin.initialize_app(cred)
 
 db = firestore.client()
 
