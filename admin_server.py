@@ -171,7 +171,10 @@ def update_current_admin():
             "error": str(error),
         }), 400
 
-
+@app.route("/")
+def home():
+    return "Liver Admin Server is Running!"
+    
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({
