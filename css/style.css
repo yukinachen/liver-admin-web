@@ -122,3 +122,8 @@ button,input,select{
 .hidden{
     display:none;
 }
+/* 個管師管理 */
+.stats{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.case-manager-binding-panel{margin-top:18px;max-width:none}
+.wrap-cell{white-space:normal;min-width:220px;line-height:1.5}
+.status-disabled{background:#e2e8f0;color:#4a5568}
