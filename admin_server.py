@@ -78,46 +78,61 @@ def create_admin():
         if len(password) < 6:
             raise ValueError("密碼至少需要 6 個字元")
 
-        # 先檢查這個 Email 是否已經存在 Firebase Authentication。
-        # 若已存在，再判斷是不是病患、醫師或個管師。
+        # -------------------------------------------------
+        # 先直接用 Email 檢查 Firestore 角色。
+        # 不依賴 document ID 是否剛好等於 Firebase Auth UID。
+        # -------------------------------------------------
+        doctor_matches = list(
+            db.collection("doctors")
+            .where("email", "==", email)
+            .limit(1)
+            .stream()
+        )
+
+        if doctor_matches:
+            doctor_data = doctor_matches[0].to_dict() or {}
+
+            if doctor_data.get("role") == "case_manager":
+                raise ValueError("此 Email 已註冊為個管師，不能建立為管理員")
+
+            raise ValueError("此 Email 已註冊為醫師，不能建立為管理員")
+
+        patient_matches = list(
+            db.collection("users")
+            .where("email", "==", email)
+            .limit(1)
+            .stream()
+        )
+
+        if patient_matches:
+            raise ValueError("此 Email 已註冊為病患，不能建立為管理員")
+
+        admin_matches = list(
+            db.collection("admins")
+            .where("email", "==", email)
+            .limit(1)
+            .stream()
+        )
+
+        if admin_matches:
+            raise ValueError("此 Email 已經是管理員帳號")
+
+        # Firestore 沒找到角色後，再檢查 Firebase Authentication。
+        # 只要 Authentication 中已經存在同 Email，也不允許建立，
+        # 避免既有帳號被重複建立或誤升級成管理員。
         try:
-            existing_user = auth.get_user_by_email(email)
-
-            uid = existing_user.uid
-
-            user_doc = db.collection("users").document(uid).get()
-            doctor_doc = db.collection("doctors").document(uid).get()
-            admin_doc = db.collection("admins").document(uid).get()
-
-            if doctor_doc.exists:
-                doctor_data = doctor_doc.to_dict() or {}
-
-                if doctor_data.get("role") == "case_manager":
-                    raise ValueError("此 Email 已註冊為個管師，不能建立為管理員")
-
-                raise ValueError("此 Email 已註冊為醫師，不能建立為管理員")
-
-            if user_doc.exists:
-                raise ValueError("此 Email 已註冊為病患，不能建立為管理員")
-
-            if admin_doc.exists:
-                raise ValueError("此 Email 已經是管理員帳號")
-
-            # Authentication 已存在，但不屬於目前系統的病患、醫師、個管師或管理員。
-            # 為避免角色來源不明，仍不允許直接建立管理員。
-            raise ValueError("此 Email 已存在帳號，不能直接建立為管理員")
-
+            auth.get_user_by_email(email)
+            raise ValueError("此 Email 已存在 Firebase 帳號，不能建立為管理員")
         except auth.UserNotFoundError:
-            # 完全不存在才建立新的 Firebase Authentication 管理員帳號
             pass
 
+        # 只有完全沒有註冊過的新 Email 才建立管理員
         created_user = auth.create_user(
             email=email,
             password=password,
             display_name=name,
         )
 
-        # 建立 Firestore 管理員文件
         db.collection("admins").document(created_user.uid).set({
             "email": email,
             "name": name,
@@ -139,8 +154,7 @@ def create_admin():
         }), 403
 
     except Exception as error:
-        # 若 Authentication 已建立，但 Firestore 建立失敗，
-        # 刪除剛建立的帳號，避免留下不完整資料。
+        # 只有本次新建立、且後續 Firestore 寫入失敗時才刪除
         if created_user is not None:
             try:
                 auth.delete_user(created_user.uid)
