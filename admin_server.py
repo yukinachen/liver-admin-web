@@ -61,6 +61,7 @@ def get_current_admin_uid():
 @app.route("/create_admin", methods=["POST"])
 def create_admin():
     created_user = None
+    user_was_created = False
 
     try:
         # 只有已登入且有效的管理員才能新增管理員
@@ -72,32 +73,50 @@ def create_admin():
         password = str(data.get("password", ""))
         name = str(data.get("name", "")).strip()
 
-        if not email or not password or not name:
-            raise ValueError("姓名、Email、密碼都必須填寫")
+        if not email or not name:
+            raise ValueError("姓名、Email 都必須填寫")
 
-        if len(password) < 6:
-            raise ValueError("密碼至少需要 6 個字元")
+        # 先確認這個 Email 是否已存在 Firebase Authentication。
+        # 若已存在（例如病患、醫師、個管師），直接沿用原本 UID，
+        # 不建立第二個 Authentication 帳號，也不修改原本密碼。
+        try:
+            target_user = auth.get_user_by_email(email)
+        except auth.UserNotFoundError:
+            # 不存在才建立新的 Firebase Authentication 帳號
+            if not password:
+                raise ValueError("新帳號必須填寫密碼")
 
-        # 建立 Firebase Authentication 帳號
-        created_user = auth.create_user(
-            email=email,
-            password=password,
-            display_name=name,
-        )
+            if len(password) < 6:
+                raise ValueError("密碼至少需要 6 個字元")
 
-        # 建立 Firestore 管理員文件
-        db.collection("admins").document(created_user.uid).set({
+            created_user = auth.create_user(
+                email=email,
+                password=password,
+                display_name=name,
+            )
+            target_user = created_user
+            user_was_created = True
+
+        # 建立 / 更新 Firestore 管理員文件。
+        # 既有病患、醫師、個管師的原本資料不會被刪除或改動，
+        # 只是額外在 admins/{uid} 加入管理員權限。
+        db.collection("admins").document(target_user.uid).set({
             "email": email,
             "name": name,
             "disabled": False,
             "createdBy": creator_uid,
             "createdAt": firestore.SERVER_TIMESTAMP,
-        })
+        }, merge=True)
 
         return jsonify({
             "success": True,
-            "uid": created_user.uid,
-            "message": "管理員帳號建立完成",
+            "uid": target_user.uid,
+            "existingUser": not user_was_created,
+            "message": (
+                "既有帳號已加入管理員權限"
+                if not user_was_created
+                else "管理員帳號建立完成"
+            ),
         })
 
     except PermissionError as error:
@@ -107,9 +126,9 @@ def create_admin():
         }), 403
 
     except Exception as error:
-        # 若 Authentication 已建立，但 Firestore 建立失敗，
-        # 刪除剛建立的帳號，避免留下不完整資料。
-        if created_user is not None:
+        # 只有「這次 API 新建立的 Authentication 帳號」才回滾刪除。
+        # 既有病患 / 醫師 / 個管師帳號絕對不刪除。
+        if user_was_created and created_user is not None:
             try:
                 auth.delete_user(created_user.uid)
             except Exception:
