@@ -505,7 +505,7 @@ $("addAdminBtn").onclick = async () => {
   const idToken = await auth.currentUser.getIdToken(true);
 
   const response = await fetch(
-    "http://127.0.0.1:5501/create_admin",
+  "/create_admin",
     {
       method: "POST",
       headers: {
@@ -609,7 +609,7 @@ $("updateCurrentAdminBtn").onclick = async () => {
       await auth.currentUser.getIdToken(true);
 
     const response = await fetch(
-      "http://127.0.0.1:5501/update_current_admin",
+  "/update_current_admin",
       {
         method: "POST",
         headers: {
