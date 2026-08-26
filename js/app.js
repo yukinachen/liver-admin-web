@@ -4,7 +4,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc,
-  deleteDoc, query, where, serverTimestamp, arrayUnion, arrayRemove
+  deleteDoc, query, where, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -18,7 +18,6 @@ const state = {
   caseManagers: [],
   patients: [],
   bindings: [],
-  caseManagerBindings: [],
   admins: []
 };
 
@@ -86,13 +85,10 @@ async function loadAll() {
     loadCaseManagers(),
     loadPatients(),
     loadBindings(),
-    loadCaseManagerBindings(),
     loadAdmins()
   ]);
-  // 等醫師與個管師資料都載入後再重畫一次，確保綁定名稱正確顯示。
+  // 醫師與個管師資料分開管理；個管師不再維護醫師綁定。
   renderCaseManagers();
-  renderCaseManagerBindings();
-  fillCaseManagerBindingSelects();
   updateDashboard();
 }
 
@@ -103,7 +99,6 @@ function updateDashboard() {
   $("pendingCaseManagerCount").textContent = state.caseManagers.filter(x => x.status === "pending").length;
   $("patientCount").textContent = state.patients.length;
   $("bindingCount").textContent = state.bindings.length;
-  $("caseManagerBindingCount").textContent = state.caseManagerBindings.length;
 }
 
 async function loadDoctors() {
@@ -111,7 +106,6 @@ async function loadDoctors() {
   state.doctors = allDoctorDocuments.filter(x => x.role !== "case_manager");
   renderDoctors();
   fillBindingSelects();
-  fillCaseManagerBindingSelects();
 }
 
 function renderDoctors() {
@@ -232,12 +226,10 @@ async function loadCaseManagers() {
   const allDoctorDocuments = await readCollection("doctors");
   state.caseManagers = allDoctorDocuments.filter(x => x.role === "case_manager");
   renderCaseManagers();
-  fillCaseManagerBindingSelects();
 }
 
 function renderCaseManagers() {
   const key = $("caseManagerSearch").value.trim().toLowerCase();
-  const doctorMap = Object.fromEntries(state.doctors.map(x => [x.id, nameOf(x)]));
   const statusText = {
     pending: "待審核",
     approved: "已核准",
@@ -249,10 +241,6 @@ function renderCaseManagers() {
     .filter(x => `${nameOf(x)} ${x.email || ""} ${x.hospitalName || ""}`.toLowerCase().includes(key))
     .map(x => {
       const status = x.status || "pending";
-      const boundDoctorUids = Array.isArray(x.boundDoctorUids) ? x.boundDoctorUids : [];
-      const boundDoctorNames = boundDoctorUids
-        .map(uid => doctorMap[uid] || uid)
-        .join("、") || "尚未綁定";
 
       let actionButtons = "";
       if (status === "pending") {
@@ -277,12 +265,11 @@ function renderCaseManagers() {
           <td>${escapeHtml(x.email)}</td>
           <td>${escapeHtml(x.hospitalName || "")}</td>
           <td><span class="status status-${status}">${statusText[status] || status}</span></td>
-          <td class="wrap-cell">${escapeHtml(boundDoctorNames)}</td>
           <td class="doctor-actions">${actionButtons}</td>
         </tr>`;
     }).join("");
 
-  $("caseManagerTable").innerHTML = rows || `<tr><td colspan="6">沒有個管師資料</td></tr>`;
+  $("caseManagerTable").innerHTML = rows || `<tr><td colspan="5">沒有個管師資料</td></tr>`;
 
   document.querySelectorAll("[data-case-manager-id]").forEach(button => {
     button.onclick = async () => {
@@ -307,102 +294,6 @@ function renderCaseManagers() {
     };
   });
 }
-
-async function loadCaseManagerBindings() {
-  state.caseManagerBindings = await readCollection("case_manager_doctor_bindings");
-  renderCaseManagerBindings();
-  fillCaseManagerBindingSelects();
-}
-
-function renderCaseManagerBindings() {
-  const caseManagerMap = Object.fromEntries(state.caseManagers.map(x => [x.id, nameOf(x)]));
-  const doctorMap = Object.fromEntries(state.doctors.map(x => [x.id, nameOf(x)]));
-
-  $("caseManagerBindingTable").innerHTML = state.caseManagerBindings.map(x => {
-    const caseManagerUid = x.caseManagerUid || x.case_manager_uid || x.managerUid || "";
-    const doctorUid = x.doctorUid || x.doctor_uid || "";
-    return `
-      <tr>
-        <td>${escapeHtml(caseManagerMap[caseManagerUid] || caseManagerUid)}</td>
-        <td>${escapeHtml(doctorMap[doctorUid] || doctorUid)}</td>
-        <td>${escapeHtml(x.status || "accepted")}</td>
-        <td><button class="action delete" data-delete-case-manager-binding="${x.id}" data-case-manager-uid="${caseManagerUid}" data-doctor-uid="${doctorUid}">解除</button></td>
-      </tr>`;
-  }).join("") || `<tr><td colspan="4">沒有綁定資料</td></tr>`;
-
-  document.querySelectorAll("[data-delete-case-manager-binding]").forEach(button => {
-    button.onclick = async () => {
-      if (!confirm("確定解除個管師與醫師的綁定？")) return;
-      const bindingId = button.dataset.deleteCaseManagerBinding;
-      const caseManagerUid = button.dataset.caseManagerUid;
-      const doctorUid = button.dataset.doctorUid;
-      try {
-        await deleteDoc(doc(db, "case_manager_doctor_bindings", bindingId));
-        if (caseManagerUid && doctorUid) {
-          await updateDoc(doc(db, "doctors", caseManagerUid), {
-            boundDoctorUids: arrayRemove(doctorUid),
-            updatedAt: serverTimestamp()
-          });
-        }
-        await Promise.all([loadCaseManagers(), loadCaseManagerBindings()]);
-        updateDashboard();
-      } catch (error) {
-        console.error(error);
-        alert("解除綁定失敗：" + error.message);
-      }
-    };
-  });
-}
-
-function fillCaseManagerBindingSelects() {
-  if (!$("caseManagerBindingManager") || !$("caseManagerBindingDoctor")) return;
-
-  $("caseManagerBindingManager").innerHTML = `<option value="">選擇個管師</option>` +
-    state.caseManagers
-      .filter(x => x.status === "approved")
-      .map(x => `<option value="${escapeHtml(x.id)}">${escapeHtml(nameOf(x))}</option>`)
-      .join("");
-
-  $("caseManagerBindingDoctor").innerHTML = `<option value="">選擇醫師</option>` +
-    state.doctors
-      .filter(x => x.status === "approved")
-      .map(x => `<option value="${escapeHtml(x.id)}">${escapeHtml(nameOf(x))}</option>`)
-      .join("");
-}
-
-$("addCaseManagerBindingBtn").onclick = async () => {
-  const caseManagerUid = $("caseManagerBindingManager").value;
-  const doctorUid = $("caseManagerBindingDoctor").value;
-
-  if (!caseManagerUid || !doctorUid) {
-    return showMessage("caseManagerBindingMessage", "請選擇個管師與醫師");
-  }
-
-  const id = `${caseManagerUid}_${doctorUid}`;
-  showMessage("caseManagerBindingMessage", "綁定中……", true);
-
-  try {
-    await setDoc(doc(db, "case_manager_doctor_bindings", id), {
-      caseManagerUid,
-      doctorUid,
-      status: "accepted",
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    }, { merge: true });
-
-    await updateDoc(doc(db, "doctors", caseManagerUid), {
-      boundDoctorUids: arrayUnion(doctorUid),
-      updatedAt: serverTimestamp()
-    });
-
-    showMessage("caseManagerBindingMessage", "個管師與醫師綁定完成", true);
-    await Promise.all([loadCaseManagers(), loadCaseManagerBindings()]);
-    updateDashboard();
-  } catch (error) {
-    console.error(error);
-    showMessage("caseManagerBindingMessage", "綁定失敗：" + error.message);
-  }
-};
 
 async function loadPatients() {
   state.patients = await readCollection("users");
@@ -554,7 +445,7 @@ $("caseManagerSearch").addEventListener("input", renderCaseManagers);
 $("patientSearch").addEventListener("input", renderPatients);
 $("reloadDoctors").onclick = loadDoctors;
 $("reloadCaseManagers").onclick = async () => {
-  await Promise.all([loadDoctors(), loadCaseManagers(), loadCaseManagerBindings()]);
+  await loadCaseManagers();
   updateDashboard();
 };
 $("reloadPatients").onclick = loadPatients;
